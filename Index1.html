@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4-Lane Car Game</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: #111;
+      font-family: sans-serif;
+    }
+
+    #gameArea {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: #111;
+      overflow: hidden;
+    }
+
+    .road {
+      position: absolute;
+      width: 80%;
+      height: 100%;
+      left: 10%;
+      background: #000;
+      z-index: 1;
+    }
+
+    .lane {
+      position: absolute;
+      width: 4px;
+      height: 40px;
+      background: yellow;
+      opacity: 0.8;
+      z-index: 2;
+    }
+
+    #car {
+      position: absolute;
+      width: 60px;
+      height: 120px;
+      bottom: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: url('https://i.postimg.cc/yWNW5dVf/car.png') no-repeat center;
+      background-size: cover;
+      z-index: 10;
+    }
+
+    .enemyCar {
+      position: absolute;
+      width: 60px;
+      height: 120px;
+      background: url('https://i.postimg.cc/V5bmSwcW/enemycar.png') no-repeat center;
+      background-size: cover;
+      z-index: 5;
+    }
+
+    .arrow {
+      position: absolute;
+      width: 50%;
+      height: 100%;
+      top: 0;
+      z-index: 20;
+    }
+    .arrow.left { left: 0; }
+    .arrow.right { right: 0; }
+
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-size: 18px;
+      z-index: 100;
+    }
+
+    #startScreen, #gameOver {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      background: rgba(0,0,0,0.9);
+      color: white;
+      font-size: 2em;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      z-index: 200;
+    }
+
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 1em;
+      border: none;
+      border-radius: 10px;
+      background: #28a745;
+      color: white;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div id="gameArea">
+  <div class="road"></div>
+  <div class="arrow left" onclick="moveLeft()"></div>
+  <div class="arrow right" onclick="moveRight()"></div>
+  <div id="car"></div>
+  <div id="score">Score: 0</div>
+
+  <div id="startScreen">
+    🚗 Tap Start to Play
+    <button onclick="startGame()">Start</button>
+  </div>
+
+  <div id="gameOver" style="display:none;">
+    💥 Game Over<br>
+    <span id="finalScore">Your Score: 0</span>
+    <button onclick="startGame()">Restart</button>
+  </div>
+</div>
+
+<script>
+  const car = document.getElementById("car");
+  const gameArea = document.getElementById("gameArea");
+  const startScreen = document.getElementById("startScreen");
+  const gameOverScreen = document.getElementById("gameOver");
+  const finalScoreText = document.getElementById("finalScore");
+  const scoreText = document.getElementById("score");
+
+  let carX = 50;
+  const lanes = [20, 35, 50, 65]; // 4-lane positions
+  const laneLines = [];
+  let enemyCars = [];
+  let gameRunning = false;
+  let score = 0;
+  let enemyInterval;
+
+  // Create center lane lines between each lane
+  const laneLinePercents = [27.5, 42.5, 57.5]; // between each lane
+  for (let i = 0; i < 20; i++) {
+    for (let p of laneLinePercents) {
+      const line = document.createElement("div");
+      line.className = "lane";
+      line.style.left = p + "%";
+      line.style.top = `${i * 100}px`;
+      gameArea.appendChild(line);
+      laneLines.push(line);
+    }
+  }
+
+  function moveLeft() {
+    if (!gameRunning) return;
+    const i = lanes.indexOf(carX);
+    if (i > 0) {
+      carX = lanes[i - 1];
+      car.style.left = carX + "%";
+    }
+  }
+
+  function moveRight() {
+    if (!gameRunning) return;
+    const i = lanes.indexOf(carX);
+    if (i < lanes.length - 1) {
+      carX = lanes[i + 1];
+      car.style.left = carX + "%";
+    }
+  }
+
+  function createEnemyCar() {
+    const car = document.createElement("div");
+    car.className = "enemyCar";
+    const lane = lanes[Math.floor(Math.random() * lanes.length)];
+    car.style.left = lane + "%";
+    car.style.top = "-140px";
+    gameArea.appendChild(car);
+    enemyCars.push(car);
+  }
+
+  function detectCollision(a, b) {
+    return !(
+      a.bottom < b.top ||
+      a.top > b.bottom ||
+      a.right < b.left ||
+      a.left > b.right
+    );
+  }
+
+  function animateGame() {
+    if (!gameRunning) return;
+
+    laneLines.forEach(line => {
+      let top = parseFloat(line.style.top);
+      top += 5;
+      if (top > window.innerHeight) top = -40;
+      line.style.top = top + "px";
+    });
+
+    const carRect = car.getBoundingClientRect();
+    enemyCars.forEach((enemy, index) => {
+      let top = parseFloat(enemy.style.top);
+      top += 3.5;
+      enemy.style.top = top + "px";
+
+      const enemyRect = enemy.getBoundingClientRect();
+      if (detectCollision(carRect, enemyRect)) {
+        endGame();
+      }
+
+      if (top > window.innerHeight) {
+        enemy.remove();
+        enemyCars.splice(index, 1);
+        score++;
+        scoreText.textContent = "Score: " + score;
+      }
+    });
+
+    requestAnimationFrame(animateGame);
+  }
+
+  function endGame() {
+    gameRunning = false;
+    clearInterval(enemyInterval);
+    finalScoreText.textContent = "Your Score: " + score;
+    gameOverScreen.style.display = "flex";
+  }
+
+  function startGame() {
+    gameRunning = true;
+    startScreen.style.display = "none";
+    gameOverScreen.style.display = "none";
+    carX = 50;
+    car.style.left = carX + "%";
+    score = 0;
+    scoreText.textContent = "Score: 0";
+
+    enemyCars.forEach(e => e.remove());
+    enemyCars = [];
+
+    enemyInterval = setInterval(() => {
+      if (gameRunning) createEnemyCar();
+    }, 1300);
+
+    animateGame();
+  }
+</script>
+
+</body>
+</html>
